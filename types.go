@@ -67,22 +67,41 @@ type APIKey struct {
 	CreatedAt string  `json:"created_at"`
 }
 
-// ListResponse wraps a paginated list of results.
+// ListParams holds cursor-based pagination parameters accepted by all list
+// endpoints. Both fields are optional.
+type ListParams struct {
+	// Limit is the maximum number of items to return per page (1-100, default 20).
+	Limit int `json:"limit,omitempty"`
+
+	// StartingAfter is a cursor for forward pagination. Pass the ID of the
+	// last item from the previous page to fetch the next page of results.
+	StartingAfter string `json:"starting_after,omitempty"`
+}
+
+// ListResponse wraps a paginated list of results returned by the API.
 type ListResponse[T any] struct {
-	Data []T  `json:"data"`
+	// Results contains the items for the current page.
+	Results []T `json:"results"`
+
+	// Next is the full URL for the next page, or nil if there are no more pages.
+	Next *string `json:"next"`
+
+	// Previous is the full URL for the previous page, or nil if this is the first page.
+	Previous *string `json:"previous"`
+
+	// Meta contains request metadata (request ID, mode).
 	Meta Meta `json:"meta"`
+}
+
+// HasMore reports whether there is a next page of results.
+func (r *ListResponse[T]) HasMore() bool {
+	return r.Next != nil
 }
 
 // Meta contains metadata returned with every API response.
 type Meta struct {
-	RequestID  string  `json:"request_id"`
-	Mode       string  `json:"mode"`
-	Page       int     `json:"page,omitempty"`
-	PerPage    int     `json:"per_page,omitempty"`
-	TotalCount int     `json:"total_count,omitempty"`
-	TotalPages int     `json:"total_pages,omitempty"`
-	HasMore    *bool   `json:"has_more,omitempty"`
-	NextCursor *string `json:"next_cursor,omitempty"`
+	RequestID string `json:"request_id"`
+	Mode      string `json:"mode"`
 }
 
 // apiResponse is the standard envelope for single-object responses.
@@ -91,10 +110,18 @@ type apiResponse[T any] struct {
 	Meta Meta `json:"meta"`
 }
 
+// apiListData is the nested data payload for list responses containing
+// cursor-based pagination fields alongside the result set.
+type apiListData[T any] struct {
+	Next     *string `json:"next"`
+	Previous *string `json:"previous"`
+	Results  []T     `json:"results"`
+}
+
 // apiListResponse is the standard envelope for list responses.
 type apiListResponse[T any] struct {
-	Data []T  `json:"data"`
-	Meta Meta `json:"meta"`
+	Data apiListData[T] `json:"data"`
+	Meta Meta           `json:"meta"`
 }
 
 // CreatePaymentLinkParams holds the parameters for creating a payment link.
@@ -120,19 +147,25 @@ type UpdatePaymentLinkParams struct {
 
 // ListPaymentLinksParams holds the query parameters for listing payment links.
 type ListPaymentLinksParams struct {
-	Page    int    `json:"page,omitempty"`
-	PerPage int    `json:"per_page,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Cursor  string `json:"cursor,omitempty"`
+	ListParams
+	Status string `json:"status,omitempty"`
 }
 
 // ListTransactionsParams holds the query parameters for listing transactions.
 type ListTransactionsParams struct {
-	Page    int    `json:"page,omitempty"`
-	PerPage int    `json:"per_page,omitempty"`
-	Type    string `json:"type,omitempty"`
-	Status  string `json:"status,omitempty"`
-	Cursor  string `json:"cursor,omitempty"`
+	ListParams
+	Type   string `json:"type,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// ListWebhookEndpointsParams holds the query parameters for listing webhook endpoints.
+type ListWebhookEndpointsParams struct {
+	ListParams
+}
+
+// ListAPIKeysParams holds the query parameters for listing API keys.
+type ListAPIKeysParams struct {
+	ListParams
 }
 
 // CreateWebhookEndpointParams holds the parameters for creating a webhook endpoint.

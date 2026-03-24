@@ -123,14 +123,14 @@ func parseAPIError(body []byte, statusCode int) error {
 	return &envelope.Error
 }
 
-// encodeListParams converts common list parameters to url.Values.
-func encodeListParams(page, perPage int, extra map[string]string) url.Values {
+// encodeListParams converts cursor-based pagination parameters to url.Values.
+func encodeListParams(lp ListParams, extra map[string]string) url.Values {
 	params := url.Values{}
-	if page > 0 {
-		params.Set("page", strconv.Itoa(page))
+	if lp.Limit > 0 {
+		params.Set("limit", strconv.Itoa(lp.Limit))
 	}
-	if perPage > 0 {
-		params.Set("per_page", strconv.Itoa(perPage))
+	if lp.StartingAfter != "" {
+		params.Set("starting_after", lp.StartingAfter)
 	}
 	for k, v := range extra {
 		if v != "" {

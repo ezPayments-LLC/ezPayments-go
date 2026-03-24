@@ -40,9 +40,8 @@ func (r *PaymentLinksResource) Get(ctx context.Context, id string) (*PaymentLink
 func (r *PaymentLinksResource) List(ctx context.Context, params *ListPaymentLinksParams) (*ListResponse[PaymentLink], error) {
 	qp := url.Values{}
 	if params != nil {
-		qp = encodeListParams(params.Page, params.PerPage, map[string]string{
+		qp = encodeListParams(params.ListParams, map[string]string{
 			"status": params.Status,
-			"cursor": params.Cursor,
 		})
 	}
 	var resp apiListResponse[PaymentLink]
@@ -50,7 +49,12 @@ func (r *PaymentLinksResource) List(ctx context.Context, params *ListPaymentLink
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse[PaymentLink]{Data: resp.Data, Meta: resp.Meta}, nil
+	return &ListResponse[PaymentLink]{
+		Results:  resp.Data.Results,
+		Next:     resp.Data.Next,
+		Previous: resp.Data.Previous,
+		Meta:     resp.Meta,
+	}, nil
 }
 
 // Update updates an existing payment link.

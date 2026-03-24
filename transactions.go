@@ -25,10 +25,9 @@ func (r *TransactionsResource) Get(ctx context.Context, id string) (*Transaction
 func (r *TransactionsResource) List(ctx context.Context, params *ListTransactionsParams) (*ListResponse[Transaction], error) {
 	qp := url.Values{}
 	if params != nil {
-		qp = encodeListParams(params.Page, params.PerPage, map[string]string{
+		qp = encodeListParams(params.ListParams, map[string]string{
 			"type":   params.Type,
 			"status": params.Status,
-			"cursor": params.Cursor,
 		})
 	}
 	var resp apiListResponse[Transaction]
@@ -36,5 +35,10 @@ func (r *TransactionsResource) List(ctx context.Context, params *ListTransaction
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse[Transaction]{Data: resp.Data, Meta: resp.Meta}, nil
+	return &ListResponse[Transaction]{
+		Results:  resp.Data.Results,
+		Next:     resp.Data.Next,
+		Previous: resp.Data.Previous,
+		Meta:     resp.Meta,
+	}, nil
 }

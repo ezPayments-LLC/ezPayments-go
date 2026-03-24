@@ -3,6 +3,7 @@ package ezpayments
 import (
 	"context"
 	"fmt"
+	"net/url"
 )
 
 // WebhookEndpointsResource provides methods for interacting with the webhook endpoints API.
@@ -35,14 +36,23 @@ func (r *WebhookEndpointsResource) Get(ctx context.Context, id string) (*Webhook
 	return &resp.Data, nil
 }
 
-// List retrieves all webhook endpoints.
-func (r *WebhookEndpointsResource) List(ctx context.Context) (*ListResponse[WebhookEndpoint], error) {
+// List retrieves a paginated list of webhook endpoints.
+func (r *WebhookEndpointsResource) List(ctx context.Context, params *ListWebhookEndpointsParams) (*ListResponse[WebhookEndpoint], error) {
+	qp := url.Values{}
+	if params != nil {
+		qp = encodeListParams(params.ListParams, nil)
+	}
 	var resp apiListResponse[WebhookEndpoint]
-	err := r.client.get(ctx, "/webhook-endpoints/", &resp)
+	err := r.client.getWithQuery(ctx, "/webhook-endpoints/", qp, &resp)
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse[WebhookEndpoint]{Data: resp.Data, Meta: resp.Meta}, nil
+	return &ListResponse[WebhookEndpoint]{
+		Results:  resp.Data.Results,
+		Next:     resp.Data.Next,
+		Previous: resp.Data.Previous,
+		Meta:     resp.Meta,
+	}, nil
 }
 
 // Update updates an existing webhook endpoint.

@@ -3,6 +3,7 @@ package ezpayments
 import (
 	"context"
 	"fmt"
+	"net/url"
 )
 
 // APIKeysResource provides methods for interacting with the API keys management API.
@@ -21,14 +22,24 @@ func (r *APIKeysResource) Create(ctx context.Context, params *CreateAPIKeyParams
 	return &resp.Data, nil
 }
 
-// List retrieves all API keys. Key values are not included in list responses.
-func (r *APIKeysResource) List(ctx context.Context) (*ListResponse[APIKey], error) {
+// List retrieves a paginated list of API keys. Key values are not included in
+// list responses.
+func (r *APIKeysResource) List(ctx context.Context, params *ListAPIKeysParams) (*ListResponse[APIKey], error) {
+	qp := url.Values{}
+	if params != nil {
+		qp = encodeListParams(params.ListParams, nil)
+	}
 	var resp apiListResponse[APIKey]
-	err := r.client.get(ctx, "/api-keys/", &resp)
+	err := r.client.getWithQuery(ctx, "/api-keys/", qp, &resp)
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse[APIKey]{Data: resp.Data, Meta: resp.Meta}, nil
+	return &ListResponse[APIKey]{
+		Results:  resp.Data.Results,
+		Next:     resp.Data.Next,
+		Previous: resp.Data.Previous,
+		Meta:     resp.Meta,
+	}, nil
 }
 
 // Delete revokes an API key by ID.

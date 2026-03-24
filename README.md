@@ -10,6 +10,7 @@ Go SDK for the [ezPayments](https://app.ezpayments.co) Merchant API v3.
 
 - Zero external dependencies (stdlib only)
 - Full coverage of the ezPayments Merchant API v3
+- Cursor-based pagination with `HasMore()` helper
 - Webhook signature verification (HMAC-SHA256)
 - Functional options pattern for client configuration
 - Idempotent request support
@@ -98,9 +99,8 @@ link, err := client.PaymentLinks.Get(ctx, "pl_abc123")
 
 // List payment links
 links, err := client.PaymentLinks.List(ctx, &ezpayments.ListPaymentLinksParams{
-    Page:   1,
-    PerPage: 20,
-    Status: "active",
+    ListParams: ezpayments.ListParams{Limit: 20},
+    Status:     "active",
 })
 
 // Update a payment link
@@ -125,10 +125,9 @@ txn, err := client.Transactions.Get(ctx, "txn_abc123")
 
 // List transactions
 txns, err := client.Transactions.List(ctx, &ezpayments.ListTransactionsParams{
-    Page:    1,
-    PerPage: 20,
-    Status:  "completed",
-    Type:    "payment",
+    ListParams: ezpayments.ListParams{Limit: 20},
+    Status:     "completed",
+    Type:       "payment",
 })
 ```
 
@@ -146,7 +145,7 @@ endpoint, err := client.WebhookEndpoints.Create(ctx, &ezpayments.CreateWebhookEn
 endpoint, err := client.WebhookEndpoints.Get(ctx, "we_abc123")
 
 // List webhook endpoints
-endpoints, err := client.WebhookEndpoints.List(ctx)
+endpoints, err := client.WebhookEndpoints.List(ctx, nil)
 
 // Update a webhook endpoint
 newURL := "https://example.com/new-webhook"
@@ -168,10 +167,75 @@ key, err := client.APIKeys.Create(ctx, &ezpayments.CreateAPIKeyParams{
 fmt.Printf("Key: %s\n", *key.Key)  // Save this, shown only once
 
 // List API keys
-keys, err := client.APIKeys.List(ctx)
+keys, err := client.APIKeys.List(ctx, nil)
 
 // Delete (revoke) an API key
 err := client.APIKeys.Delete(ctx, "key_abc123")
+```
+
+## Pagination
+
+All list endpoints use cursor-based pagination. Control page size with `Limit` (1-100, default 20) and paginate forward with `StartingAfter`.
+
+```go
+// Fetch the first page
+resp, err := client.PaymentLinks.List(ctx, &ezpayments.ListPaymentLinksParams{
+    ListParams: ezpayments.ListParams{Limit: 10},
+    Status:     "active",
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, link := range resp.Results {
+    fmt.Println(link.ID, link.Amount)
+}
+```
+
+### Iterating through all pages
+
+Use `HasMore()` and `StartingAfter` to walk through every page:
+
+```go
+var allLinks []ezpayments.PaymentLink
+var cursor string
+
+for {
+    resp, err := client.PaymentLinks.List(ctx, &ezpayments.ListPaymentLinksParams{
+        ListParams: ezpayments.ListParams{
+            Limit:         50,
+            StartingAfter: cursor,
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    allLinks = append(allLinks, resp.Results...)
+
+    if !resp.HasMore() {
+        break
+    }
+
+    // Use the last item's ID as the cursor for the next page
+    cursor = resp.Results[len(resp.Results)-1].ID
+}
+
+fmt.Printf("Total links: %d\n", len(allLinks))
+```
+
+### Response structure
+
+Every list response includes:
+
+```go
+resp, _ := client.Transactions.List(ctx, nil)
+
+resp.Results   // []Transaction - items for this page
+resp.HasMore() // bool - true if there is a next page
+resp.Next      // *string - full URL for the next page (nil if last page)
+resp.Previous  // *string - full URL for the previous page (nil if first page)
+resp.Meta      // Meta{RequestID, Mode}
 ```
 
 ## Webhook Verification
@@ -238,7 +302,7 @@ if err != nil {
 
 ## Response Metadata
 
-All list responses include metadata:
+All responses include metadata:
 
 ```go
 links, err := client.PaymentLinks.List(ctx, nil)
@@ -248,8 +312,6 @@ if err != nil {
 
 fmt.Printf("Request ID: %s\n", links.Meta.RequestID)
 fmt.Printf("Mode: %s\n", links.Meta.Mode)  // "live" or "test"
-fmt.Printf("Total: %d\n", links.Meta.TotalCount)
-fmt.Printf("Page: %d\n", links.Meta.Page)
 ```
 
 ## License

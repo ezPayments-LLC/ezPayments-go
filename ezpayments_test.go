@@ -172,37 +172,94 @@ func TestPaymentLinksGet(t *testing.T) {
 }
 
 func TestPaymentLinksList(t *testing.T) {
+	nextURL := "https://app.ezpayments.co/api/v3/payment-links/?cursor=pl_2"
 	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("expected GET, got %s", r.Method)
 		}
-		if r.URL.Query().Get("page") != "2" {
-			t.Fatalf("expected page=2, got %s", r.URL.Query().Get("page"))
+		if r.URL.Query().Get("limit") != "10" {
+			t.Fatalf("expected limit=10, got %s", r.URL.Query().Get("limit"))
 		}
 		if r.URL.Query().Get("status") != "active" {
 			t.Fatalf("expected status=active, got %s", r.URL.Query().Get("status"))
 		}
 		jsonResponse(w, http.StatusOK, apiListResponse[PaymentLink]{
-			Data: []PaymentLink{
-				{ID: "pl_1", Amount: "10.00"},
-				{ID: "pl_2", Amount: "20.00"},
+			Data: apiListData[PaymentLink]{
+				Results: []PaymentLink{
+					{ID: "pl_1", Amount: "10.00"},
+					{ID: "pl_2", Amount: "20.00"},
+				},
+				Next:     &nextURL,
+				Previous: nil,
 			},
-			Meta: Meta{RequestID: "req_1", Page: 2, TotalCount: 10},
+			Meta: Meta{RequestID: "req_1", Mode: "test"},
 		})
 	})
 
 	resp, err := client.PaymentLinks.List(context.Background(), &ListPaymentLinksParams{
-		Page:   2,
-		Status: "active",
+		ListParams: ListParams{Limit: 10},
+		Status:     "active",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Fatalf("expected 2 links, got %d", len(resp.Data))
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(resp.Results))
 	}
-	if resp.Meta.TotalCount != 10 {
-		t.Fatalf("expected total count 10, got %d", resp.Meta.TotalCount)
+	if !resp.HasMore() {
+		t.Fatal("expected HasMore() to be true")
+	}
+	if resp.Previous != nil {
+		t.Fatal("expected Previous to be nil")
+	}
+}
+
+func TestPaymentLinksListWithStartingAfter(t *testing.T) {
+	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("starting_after") != "pl_abc" {
+			t.Fatalf("expected starting_after=pl_abc, got %s", r.URL.Query().Get("starting_after"))
+		}
+		jsonResponse(w, http.StatusOK, apiListResponse[PaymentLink]{
+			Data: apiListData[PaymentLink]{
+				Results: []PaymentLink{{ID: "pl_def"}},
+			},
+			Meta: Meta{RequestID: "req_2"},
+		})
+	})
+
+	resp, err := client.PaymentLinks.List(context.Background(), &ListPaymentLinksParams{
+		ListParams: ListParams{StartingAfter: "pl_abc"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(resp.Results))
+	}
+	if resp.HasMore() {
+		t.Fatal("expected HasMore() to be false when Next is nil")
+	}
+}
+
+func TestPaymentLinksListNilParams(t *testing.T) {
+	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RawQuery != "" {
+			t.Fatalf("expected no query params, got %s", r.URL.RawQuery)
+		}
+		jsonResponse(w, http.StatusOK, apiListResponse[PaymentLink]{
+			Data: apiListData[PaymentLink]{
+				Results: []PaymentLink{{ID: "pl_1"}},
+			},
+			Meta: Meta{RequestID: "req_1"},
+		})
+	})
+
+	resp, err := client.PaymentLinks.List(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(resp.Results))
 	}
 }
 
@@ -293,7 +350,9 @@ func TestTransactionsGet(t *testing.T) {
 func TestTransactionsList(t *testing.T) {
 	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, apiListResponse[Transaction]{
-			Data: []Transaction{{ID: "txn_1"}, {ID: "txn_2"}},
+			Data: apiListData[Transaction]{
+				Results: []Transaction{{ID: "txn_1"}, {ID: "txn_2"}},
+			},
 			Meta: Meta{RequestID: "req_1"},
 		})
 	})
@@ -302,8 +361,41 @@ func TestTransactionsList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Fatalf("expected 2 transactions, got %d", len(resp.Data))
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 transactions, got %d", len(resp.Results))
+	}
+}
+
+func TestTransactionsListWithPagination(t *testing.T) {
+	nextURL := "https://app.ezpayments.co/api/v3/transactions/?cursor=txn_2"
+	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("limit") != "5" {
+			t.Fatalf("expected limit=5, got %s", r.URL.Query().Get("limit"))
+		}
+		if r.URL.Query().Get("status") != "completed" {
+			t.Fatalf("expected status=completed, got %s", r.URL.Query().Get("status"))
+		}
+		jsonResponse(w, http.StatusOK, apiListResponse[Transaction]{
+			Data: apiListData[Transaction]{
+				Results: []Transaction{{ID: "txn_1"}},
+				Next:    &nextURL,
+			},
+			Meta: Meta{RequestID: "req_1"},
+		})
+	})
+
+	resp, err := client.Transactions.List(context.Background(), &ListTransactionsParams{
+		ListParams: ListParams{Limit: 5},
+		Status:     "completed",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(resp.Results))
+	}
+	if !resp.HasMore() {
+		t.Fatal("expected HasMore() to be true")
 	}
 }
 
@@ -337,6 +429,25 @@ func TestWebhookEndpointsCreate(t *testing.T) {
 	}
 	if endpoint.Secret != "whsec_xxx" {
 		t.Fatalf("expected secret whsec_xxx, got %s", endpoint.Secret)
+	}
+}
+
+func TestWebhookEndpointsList(t *testing.T) {
+	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, apiListResponse[WebhookEndpoint]{
+			Data: apiListData[WebhookEndpoint]{
+				Results: []WebhookEndpoint{{ID: "we_1"}, {ID: "we_2"}},
+			},
+			Meta: Meta{RequestID: "req_1"},
+		})
+	})
+
+	resp, err := client.WebhookEndpoints.List(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 endpoints, got %d", len(resp.Results))
 	}
 }
 
@@ -390,17 +501,40 @@ func TestAPIKeysCreate(t *testing.T) {
 func TestAPIKeysList(t *testing.T) {
 	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, apiListResponse[APIKey]{
-			Data: []APIKey{{ID: "key_1", Name: "Prod"}, {ID: "key_2", Name: "Dev"}},
+			Data: apiListData[APIKey]{
+				Results: []APIKey{{ID: "key_1", Name: "Prod"}, {ID: "key_2", Name: "Dev"}},
+			},
 			Meta: Meta{RequestID: "req_1"},
 		})
 	})
 
-	resp, err := client.APIKeys.List(context.Background())
+	resp, err := client.APIKeys.List(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(resp.Data) != 2 {
-		t.Fatalf("expected 2 keys, got %d", len(resp.Data))
+	if len(resp.Results) != 2 {
+		t.Fatalf("expected 2 keys, got %d", len(resp.Results))
+	}
+}
+
+// --- Pagination ---
+
+func TestListResponseHasMore(t *testing.T) {
+	next := "https://app.ezpayments.co/api/v3/payment-links/?cursor=abc"
+	withNext := &ListResponse[PaymentLink]{
+		Results: []PaymentLink{{ID: "pl_1"}},
+		Next:    &next,
+	}
+	if !withNext.HasMore() {
+		t.Fatal("expected HasMore() to be true when Next is set")
+	}
+
+	withoutNext := &ListResponse[PaymentLink]{
+		Results: []PaymentLink{{ID: "pl_1"}},
+		Next:    nil,
+	}
+	if withoutNext.HasMore() {
+		t.Fatal("expected HasMore() to be false when Next is nil")
 	}
 }
 
@@ -530,7 +664,7 @@ func TestVerifyWebhookSignatureMissingV1(t *testing.T) {
 
 func TestContextCancellation(t *testing.T) {
 	client, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		// Simulate slow response — but context should cancel before we respond
+		// Simulate slow response -- context should cancel before we respond
 		<-r.Context().Done()
 	})
 
